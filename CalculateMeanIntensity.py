@@ -2,6 +2,13 @@
 #Script to calculate the mean intensity across many cells labelled using the ImageJ MorphoLibJ Segmentation plugin. 
 #Created by Benjamin Mark Lowe
 
+
+####User Parameters####
+#By default background is set to largest label, but can be manually set here:
+manually_assign_backgroundlayer_to_label=None #Set to None to auto-select. imageJ label number can be visualised using Image>Color>Color Picker's value)
+warning_threshold=0.01 #if normalised intensity of a cell (R_a=(C1-B1)/(C2-B2)) is below this threshold, throw a warning at the end of the script. 
+######################
+
 from ij import IJ, WindowManager, ImagePlus
 from java.util import ArrayList
 from ij.gui import GenericDialog
@@ -16,14 +23,12 @@ import sys
 import os
 import csv
 
- 
 
-####User Parameters####
-#By default background is set to largest label, but can be manually set here:
-manually_assign_backgroundlayer_to_label=None #Based on imageJ label number (e.g. Image>Color>Color Picker's value)
-warning_threshold=0.01 #if normalised intensity of a cell (R_a=(C1-B1)/(C2-B2)) is below this threshold, throw a warning at the end of the script. 
-######################
-
+def median(lst):
+    quotient, remainder = divmod(len(lst), 2)
+    if remainder:
+        return sorted(lst)[quotient]
+    return float(sum(sorted(lst)[quotient - 1:quotient + 1]) / 2)
 
 def standard_deviation(lst, population=True):
     """Calculates the standard deviation for a list of numbers."""
@@ -146,8 +151,7 @@ def summarise_input(rawimg, labelimg):
 			
 	mergedTable.show( inputimg.getShortTitle() +"-intensity-measurements" )
 	
-	background_label_index, background_number_of_voxels = max(enumerate(d["NumberOfVoxels"]), key=operator.itemgetter(1))
-	print("The auto-selected background is at label {} (i.e. python index {})".format(d["label"][background_label_index], background_label_index)) 
+
 
 	###Ensure labels file is in the correct format: ###
 	tmp=map(int, d["label"]) #convert label numbers (strings) to integers
@@ -155,8 +159,13 @@ def summarise_input(rawimg, labelimg):
 								whereas this script was written assuming they are. \
 								If this error occurs, it means the script needs editing"
     ###################################################
+    
 	if manually_assign_backgroundlayer_to_label:
-		background_label_index=manually_assign_backgroundlayer_to_label-1
+		background_label_index=tmp.index(manually_assign_backgroundlayer_to_label)
+		print("The background has been manually selected as label {} (i.e. python index {})".format(manually_assign_backgroundlayer_to_label, background_label_index)) 
+	else:
+		background_label_index, background_number_of_voxels = max(enumerate(d["NumberOfVoxels"]), key=operator.itemgetter(1))
+		print("The auto-selected background is at label {} (i.e. python index {})".format(d["label"][background_label_index], background_label_index)) 
 
 	return d["label"], numLabels, background_label_index, d["label"][background_label_index]
 
@@ -224,9 +233,10 @@ def process_jjmfile(manual_data_name=None, manual_label_name=None):
 	
 	N=len(per_cell_intensity_list)
 	r_mean=sum(per_cell_intensity_list)/float(N)
+	r_median=median(per_cell_intensity_list)
 	r_std=standard_deviation(per_cell_intensity_list, population=False)
 	print("Analysis Complete!")
-	print("Mean:{}\nStd:{}\nN:{}".format(r_mean, r_std, N))
+	print("Mean:{}\nStd:{}\nN:{}\nMedian:{}".format(r_mean, r_std, N, r_median))
 	
 	print("Each cell's mean intensity is shown below:")
 	print(per_cell_intensity_list)
@@ -237,20 +247,26 @@ def process_jjmfile(manual_data_name=None, manual_label_name=None):
 			nwarnings+=1
 			
 
-	return r_mean,r_std,N,nwarnings
+	return r_mean,r_std,r_median,N,nwarnings, per_cell_intensity_list
 
+
+"""
+
+######
+#This block of code can be used instead of process_jjmfile() to process a series of images
+#And output the results to a .csv file. 
+######
 path='C:\\CellAnalysis\\Analysis1\\'
-f=open(os.path.join(path, 'summary.csv'), 'w') 
+f=open(os.path.join(path, 'summary.csv'), 'wb') 
 csvwriter = csv.writer(f)
-csvwriter.writerow(["filename","mean","std","N","N_warnings"])
+csvwriter.writerow(["filename","mean","std","median","N","N_warnings","cell_intensities"])
 
 for i in xrange(14):
 	hardcoded_data_name="HeLa30uMtimelapse"+str(i+1)+".lsm"
-
-	r_mean,r_std,N,nwarnings = process_jjmfile(os.path.join(path, hardcoded_data_name), os.path.join(path, "HeLa30uMtimelapse1_label_wc.tif"))
-	
-	csvwriter.writerow([hardcoded_data_name,r_mean,r_std,N,nwarnings])
+	r_mean,r_std,r_median,N,nwarnings,per_cell_intensity_list= process_jjmfile(os.path.join(path, hardcoded_data_name), os.path.join(path, "HeLa30uMtimelapse1_label_wc.tif"))
+	csvwriter.writerow([hardcoded_data_name,r_mean,r_std,r_median,N,nwarnings,per_cell_intensity_list])
 
 f.close()
-
+"""
+process_jjmfile()
 print("Script Complete.")
