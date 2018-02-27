@@ -1,12 +1,36 @@
-#23rd February 2018
-#Script to calculate the mean intensity across many cells labelled using the ImageJ MorphoLibJ Segmentation plugin. 
-#Created by Benjamin Mark Lowe
+"""
+MIT License
 
+Copyright (c) 2018 Benjamin Mark Lowe
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
+#Jython Script to calculate the mean intensity across many cells labelled using the ImageJ MorphoLibJ Segmentation plugin. 
+#See seperate documentation for usage instructions.
 
 ####User Parameters####
 #By default background is set to largest label, but can be manually set here:
 manually_assign_backgroundlayer_to_label=None #Set to None to auto-select. imageJ label number can be visualised using Image>Color>Color Picker's value)
 warning_threshold=0.01 #if normalised intensity of a cell (R_a=(C1-B1)/(C2-B2)) is below this threshold, throw a warning at the end of the script. 
+#show_table=False ## implement me
+#for_each_cell_calculate="Mean" # "Median" 
 ######################
 
 from ij import IJ, WindowManager, ImagePlus
@@ -154,6 +178,11 @@ def summarise_input(rawimg, labelimg):
 
 
 	###Ensure labels file is in the correct format: ###
+
+    #Labels sometimes have gaps (e.g. labels=[4,40,82]  is possible). 
+    #The Python script stores them in a python list, and accesses them by “python indexes” (i.e. their order, starting with 0)  
+    #In this example, label 4 would have a python index of 0 and label 40 would have a python index of 1 etc.
+  
 	tmp=map(int, d["label"]) #convert label numbers (strings) to integers
 	assert sorted(tmp) == tmp, "FATAL ERROR: The labels provided are not in numerical order, \
 								whereas this script was written assuming they are. \
@@ -209,11 +238,11 @@ def process_jjmfile(manual_data_name=None, manual_label_name=None):
 	print("Loading first frame to show a tabular summary (and to find the background)...") 
 	labels, numLabels, background_label_index, background_label = summarise_input(rawimg, labelimg) 
 	
-	inputimg=Duplicator().run(rawimg, 1, 1, 1, 1, 1, 1)
-	im = IntensityMeasures( inputimg, labelimg )
-	label_index=0
-	results = ArrayList()
-	results.add( im.getMean() )
+	#inputimg=Duplicator().run(rawimg, 1, 1, 1, 1, 1, 1)
+	#im = IntensityMeasures( inputimg, labelimg )
+	#label_index=0
+	#results = ArrayList()
+	#results.add( im.getMedian() )
 	
 	df=build_database(numLabels, rawimg, labelimg)
 	
@@ -243,15 +272,15 @@ def process_jjmfile(manual_data_name=None, manual_label_name=None):
 	nwarnings=0
 	for i, cell in enumerate(per_cell_intensity_list):
 		if cell < warning_threshold:
-			print("WARNING: Cell Index Label {} has an low intensity of: {}".format(i+1, cell)) 
+			print("WARNING: Cell Label {} (i.e. python index {}) has an low intensity of: {}".format(labels[i], i, cell)) 
 			nwarnings+=1
 			
 
 	return r_mean,r_std,r_median,N,nwarnings, per_cell_intensity_list
 
 
-"""
 
+"""
 ######
 #This block of code can be used instead of process_jjmfile() to process a series of images
 #And output the results to a .csv file. 
