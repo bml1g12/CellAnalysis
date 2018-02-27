@@ -214,28 +214,33 @@ def build_database(numLabels, rawimg, labelimg):
 	results = ArrayList()
 	nSlices=rawimg.getNSlices()
 	print("Creating a database of over both channels and over {} z-slices...".format(nSlices))
-	
-	df={"channel1":{}, "channel2":{}}
-	
-	for label_index in xrange(numLabels):
-		df["channel1"][label_index]=[] #assumes label_index are 0,1,2... etc. with no gaps. The list will be a list mean intensity for each cell in that channel
-		df["channel2"][label_index]=[] #assumes label_index are 0,1,2... etc. with no gaps. The list will be a list mean intensity for each cell in that channel
-		
-	for c in [1,2]:#iterate over channels
-		for z in xrange(nSlices):#iterate over z-dimension
-			inputimg=Duplicator().run(rawimg, c, c, z, z, 1, 1)
-			im = IntensityMeasures( inputimg, labelimg )
-			for label_index in xrange(numLabels): #Add mean intensity for each cell
-				if c == 1:
-					if for_each_cell_calculate == "Mean":
-						df["channel1"][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
-					elif for_each_cell_calculate == "Median":
-						df["channel1"][label_index].append(im.getMedian().getValue("Median",label_index)) #Store median intensity for the label at label_index at a z position of z 
-				elif c == 2:
-					if for_each_cell_calculate == "Mean":
-						df["channel2"][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
-					elif for_each_cell_calculate == "Median":
-						df["channel2"][label_index].append(im.getMedian().getValue("Median",label_index)) #Store median intensity for the label at label_index at a z position of z 
+
+	nFrames=rawimg.getNFrames()
+	#Create a dictionary with key channel1 whose value is a dictionary of key time_index (0,1,2...nFrames) whose value if an empty dictionary
+	df={}
+	df["channel1"]=dict([i for i in zip(xrange(nFrames),   [{} for i in xrange(nFrames)]    )]) 
+	df["channel2"]=dict([i for i in zip(xrange(nFrames),   [{} for i in xrange(nFrames)]    )])
+	for t_index in xrange(nFrames):
+		for label_index in xrange(numLabels):
+			df["channel1"][t_index][label_index]=[] #The list will contain a list average intensity for each cell in that channel at time=t_index
+			df["channel2"][t_index][label_index]=[] #The list will contain a list average intensity for each cell in that channel at time=t_index
+
+	for t_index in xrange(nFrames):
+		for c in [1,2]:#iterate over channels
+			for z in xrange(nSlices):#iterate over z-dimension
+				inputimg=Duplicator().run(rawimg, c, c, z, z, 1, 1)
+				im = IntensityMeasures( inputimg, labelimg )
+				for label_index in xrange(numLabels): #Add mean intensity for each cell
+					if c == 1:
+						if for_each_cell_calculate == "Mean":
+							df["channel1"][t_index][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
+						elif for_each_cell_calculate == "Median":
+							df["channel1"][t_index][label_index].append(im.getMedian().getValue("Median",label_index)) #Store median intensity for the label at label_index at a z position of z 
+					elif c == 2:
+						if for_each_cell_calculate == "Mean":
+							df["channel2"][t_index][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
+						elif for_each_cell_calculate == "Median":
+							df["channel2"][t_index][label_index].append(im.getMedian().getValue("Median",label_index)) #Store median intensity for the label at label_index at a z position of z 
 
 	return df
 
@@ -254,12 +259,13 @@ def process_jjmfile(manual_data_name=None, manual_label_name=None):
 	per_cell_intensity_list=[]
 	cell_label_index_list=[i for i in xrange(numLabels)]
 	cell_label_index_list.remove(background_label_index)
-	
-	for cell_label_index in cell_label_index_list: 
-		zpos_index, maxintensity=max(enumerate(df["channel1"][cell_label_index]), key=operator.itemgetter(1))
-		r_cell=(df["channel1"][cell_label_index][zpos_index] - df["channel1"][background_label_index][zpos_index])/(df["channel2"][cell_label_index][zpos_index] - df["channel2"][background_label_index][zpos_index])
-		per_cell_intensity_list.append(r_cell)
-	
+
+	for t_index in xrange(rawimg.getNFrames()):
+		for cell_label_index in cell_label_index_list: 
+			zpos_index, maxintensity=max(enumerate(df["channel1"][t_index][cell_label_index]), key=operator.itemgetter(1))
+			r_cell=(df["channel1"][t_index][cell_label_index][zpos_index] - df["channel1"][t_index][background_label_index][zpos_index])/(df["channel2"][t_index][cell_label_index][zpos_index] - df["channel2"][t_index][background_label_index][zpos_index])
+			per_cell_intensity_list.append(r_cell)
+
 	N=len(per_cell_intensity_list)
 	r_mean=sum(per_cell_intensity_list)/float(N)
 	r_median=median(per_cell_intensity_list)
