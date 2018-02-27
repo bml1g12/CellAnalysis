@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
+#Version 1.0 
 #Jython Script to calculate the mean intensity across many cells labelled using the ImageJ MorphoLibJ Segmentation plugin. 
 #See seperate documentation for usage instructions.
 
@@ -29,8 +29,8 @@ SOFTWARE.
 #By default background is set to largest label, but can be manually set here:
 manually_assign_backgroundlayer_to_label=None #Set to None to auto-select. imageJ label number can be visualised using Image>Color>Color Picker's value)
 warning_threshold=0.01 #if normalised intensity of a cell (R_a=(C1-B1)/(C2-B2)) is below this threshold, throw a warning at the end of the script. 
-#show_table=False ## implement me
-#for_each_cell_calculate="Mean" # "Median" 
+show_table=True # show a visual summary of results
+for_each_cell_calculate="Mean" # options:"Mean" or "Median". What should be used in calculating C1,B1,C2 and B2 WITHIN each cell
 ######################
 
 from ij import IJ, WindowManager, ImagePlus
@@ -47,6 +47,7 @@ import sys
 import os
 import csv
 
+assert for_each_cell_calculate == "Mean" or for_each_cell_calculate == "Median", "Error: for_each_cell_calculate must be set to either 'Mean' or 'Median'"
 
 def median(lst):
     quotient, remainder = divmod(len(lst), 2)
@@ -89,7 +90,8 @@ def load_environment(hardcoded_data_name=None, hardcoded_label_name=None):
 	else:
 		print("Loading images from GUI selection")
 		nbima = WindowManager.getImageCount()
-		print("There are this many windows open: "+str(nbima))
+		
+		print("There are this {} windows open".format(nbima))
 	
 		if nbima < 2 :
 			IJ.error( "Intensity Measures input error", \
@@ -110,13 +112,12 @@ def load_environment(hardcoded_data_name=None, hardcoded_label_name=None):
 			inputIndex = gd.getNextChoiceIndex()
 			labelsIndex = gd.getNextChoiceIndex()
 	
-		print(inputIndex,labelsIndex)
-	
 		rawimg=WindowManager.getImage(inputIndex+1)
 		labelimg=WindowManager.getImage(labelsIndex+1)
 		rawimg_name=rawimg.getTitle()
 		labelimg_name=labelimg.getTitle()
 		print("Data filename is: "+str(rawimg_name))
+		print("Which has {} time frames.".format(rawimg.getNFrames()))
 		print("Labels filename is: "+str(labelimg_name))
 		print("Which has these labels: {}".format( list(LabelImages.findAllLabels( labelimg ))))
 		
@@ -172,8 +173,9 @@ def summarise_input(rawimg, labelimg):
 			value = results.get( j ).getValue( measure, i )
 			mergedTable.addValue( measure, value )
 			d[measure].append(value)
-			
-	mergedTable.show( inputimg.getShortTitle() +"-intensity-measurements" )
+
+	if show_table:
+		mergedTable.show( inputimg.getShortTitle() +"-intensity-measurements" )
 	
 
 
@@ -225,9 +227,15 @@ def build_database(numLabels, rawimg, labelimg):
 			im = IntensityMeasures( inputimg, labelimg )
 			for label_index in xrange(numLabels): #Add mean intensity for each cell
 				if c == 1:
-					df["channel1"][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
+					if for_each_cell_calculate == "Mean":
+						df["channel1"][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
+					elif for_each_cell_calculate == "Median":
+						df["channel1"][label_index].append(im.getMedian().getValue("Median",label_index)) #Store median intensity for the label at label_index at a z position of z 
 				elif c == 2:
-					df["channel2"][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
+					if for_each_cell_calculate == "Mean":
+						df["channel2"][label_index].append(im.getMean().getValue("Mean",label_index)) #Store mean intensity for the label at label_index at a z position of z 
+					elif for_each_cell_calculate == "Median":
+						df["channel2"][label_index].append(im.getMedian().getValue("Median",label_index)) #Store median intensity for the label at label_index at a z position of z 
 
 	return df
 
@@ -237,12 +245,6 @@ def process_jjmfile(manual_data_name=None, manual_label_name=None):
 	
 	print("Loading first frame to show a tabular summary (and to find the background)...") 
 	labels, numLabels, background_label_index, background_label = summarise_input(rawimg, labelimg) 
-	
-	#inputimg=Duplicator().run(rawimg, 1, 1, 1, 1, 1, 1)
-	#im = IntensityMeasures( inputimg, labelimg )
-	#label_index=0
-	#results = ArrayList()
-	#results.add( im.getMedian() )
 	
 	df=build_database(numLabels, rawimg, labelimg)
 	
@@ -258,12 +260,11 @@ def process_jjmfile(manual_data_name=None, manual_label_name=None):
 		r_cell=(df["channel1"][cell_label_index][zpos_index] - df["channel1"][background_label_index][zpos_index])/(df["channel2"][cell_label_index][zpos_index] - df["channel2"][background_label_index][zpos_index])
 		per_cell_intensity_list.append(r_cell)
 	
-	
-	
 	N=len(per_cell_intensity_list)
 	r_mean=sum(per_cell_intensity_list)/float(N)
 	r_median=median(per_cell_intensity_list)
 	r_std=standard_deviation(per_cell_intensity_list, population=False)
+	
 	print("Analysis Complete!")
 	print("Mean:{}\nStd:{}\nN:{}\nMedian:{}".format(r_mean, r_std, N, r_median))
 	
@@ -298,4 +299,5 @@ for i in xrange(14):
 f.close()
 """
 process_jjmfile()
+
 print("Script Complete.")
